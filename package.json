@@ -6,7 +6,7 @@
   "main": "build/index.js",
   "type": "module",
   "bin": {
-    "local-component-mcp": "./build/index.js"
+    "local-component-mcp": "build/index.js"
   },
   "scripts": {
     "build": "tsc",

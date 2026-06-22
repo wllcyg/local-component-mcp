@@ -1,0 +1,8 @@
+# 发布时不包含源码和开发文件
+src/
+*.ts
+!build/**
+.github/
+.gitignore
+tsconfig.json
+test-*.js
