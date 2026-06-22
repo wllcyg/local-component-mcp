@@ -1,6 +1,6 @@
 {
   "name": "@wllcyg001/local-component-mcp",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": false,
   "description": "MCP server for parsing local Vue components",
   "main": "build/index.js",
