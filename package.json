@@ -1,6 +1,6 @@
 {
   "name": "@wllcyg001/local-component-mcp",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "private": false,
   "description": "MCP server for parsing local Vue components",
   "main": "build/index.js",
@@ -17,6 +17,7 @@
     "@babel/parser": "^7.24.0",
     "@babel/traverse": "^7.24.0",
     "@modelcontextprotocol/sdk": "^0.6.0",
+    "react-docgen": "^8.0.3",
     "vue-docgen-api": "^4.75.1"
   },
   "devDependencies": {

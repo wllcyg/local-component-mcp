@@ -6,14 +6,14 @@
 
 在日常使用 Cursor、Claude 等 AI 辅助编码时，默认的代码库检索（RAG）往往会被组件内部长达数百行的复杂业务逻辑、生命周期钩子所污染。这就导致 AI 无法准确获取你的定制组件（如 `<ProTable>`、`<BizSelect>`）究竟有哪些可用的属性。**后果就是：AI 总是胡乱猜测属性名、漏传必填参数（幻觉严重）。**
 
-本插件通过引入 `vue-docgen-api`，对本地 `.vue` 源码进行 **AST（抽象语法树）级别的静态解析**。它直接剥离了所有的业务代码噪音，专门为大模型提供 **100% 纯净、高度结构化**的组件接口（Props, Emits, Slots, 注释）。让 AI 像看官方 API 文档一样，精确无误地调用你项目里的任何本地业务组件！
+本插件通过引入 `vue-docgen-api` 与 `react-docgen`，对本地 `.vue`、`.tsx`、`.jsx` 源码进行 **AST（抽象语法树）级别的静态解析**。它直接剥离了所有的业务代码噪音，专门为大模型提供 **100% 纯净、高度结构化**的组件接口（Props, Emits, Slots, 注释）。让 AI 像看官方 API 文档一样，精确无误地调用你项目里的任何本地业务组件！
 
 ## 🚀 功能特性
 
 - 🔍 **动态目录扫描**：无需硬编码配置，AI 可根据当前工作区路径，动态扫描并过滤指定目录下的 `.vue`、`.tsx`、`.jsx` 组件或全局状态文件（Store）。
 - 📖 **AST 级提炼**：
   - **组件透视**：毫秒级解析源码，精准提取 Props 类型、默认值、必填项、Events 触发事件以及 TSDoc 注释，同时返回完整的依赖导入列表。
-  - **状态透视**：深度解析 Vuex / Pinia 配置文件，秒级提取全局 `state`、`getters` 以及 `actions` 的结构，同时支持 **Pinia Setup Store** 风格解析。
+  - **状态透视**：深度解析 Vuex / Pinia (Vue) 以及 Zustand / Redux Toolkit / Jotai (React) 配置文件，秒级提取全局 `state`、`getters` 以及 `actions` 的结构，同时支持 Pinia Setup Store 等风格解析。
   - **逆向引用查找**：全项目范围精准检索某个组件被哪些文件引用，支持重命名导入、kebab-case 标签及全局注册场景。
 - 🗂 **路径别名支持**：自动读取项目的 `tsconfig.json`、`vite.config.ts`、`vue.config.js` 等配置文件并解析别名，支持 `@/components/Foo.vue` 等别名路径直接作为参数传入。别名配置读取结果带 **mtime 感知缓存**，配置文件修改后自动重新加载，无需重启服务。
 - ⚡️ **零维护成本**：代码即文档！只要代码修改，AI 再次查询即是最新状态，永远不需要人工额外维护一份 JSON 配置或 Wiki。
@@ -83,7 +83,7 @@ AST 级别解析指定组件的结构，提取接口规范及依赖信息。
 - **返回**: 匹配到的 Store 文件列表及数量。
 
 ### 5. `get_store_detail`
-利用 Babel AST 解析 Vuex 或 Pinia 的 Store 文件，将繁杂的代码浓缩为极简的状态结构图。同时支持 **Option Store** 和 **Setup Store** 两种 Pinia 写法。
+利用 Babel AST 解析 Vuex / Pinia (Vue) 或 Zustand / Redux Toolkit / Jotai (React) 的 Store 文件，将繁杂的代码浓缩为极简的状态结构图。同时支持 Pinia Setup Store、Zustand create、RTK createSlice 及 Jotai atom 的解析。
 - **参数**:
   - `filePath` (必须): Store 文件路径（支持别名路径）。
   - `workspacePath` (可选): 项目根目录，用于别名解析；未传时自动向上查找。

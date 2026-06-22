@@ -1,7 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
-import { parse } from "vue-docgen-api";
+import { parse as parseReact } from "react-docgen";
+import { parse as parseVue } from "vue-docgen-api";
 import { resolveAliasPath, isLikelyAliasPath, findProjectRoot } from "../alias.js";
 import { getComponentFiles } from "../utils/files.js";
 import { extractImports } from "../utils/imports.js";
@@ -77,9 +78,25 @@ export async function handleGetComponentDetail(args: any) {
 
   let componentDoc: any = {};
   try {
-    componentDoc = await parse(filePath);
-  } catch (_) {
-    componentDoc = { __failedToDocgen: true };
+    if (ext === ".vue") {
+      componentDoc = await parseVue(filePath);
+    } else {
+      const code = fs.readFileSync(filePath, "utf-8");
+      const docs = parseReact(code, {
+        babelOptions: {
+          filename: filePath,
+          babelrc: false,
+          configFile: false,
+        },
+      });
+      if (Array.isArray(docs) && docs.length > 0) {
+        componentDoc = { ...docs[0], components: docs };
+      } else {
+        componentDoc = {};
+      }
+    }
+  } catch (err: any) {
+    componentDoc = { __failedToDocgen: true, __error: err?.message || String(err) };
   }
 
   const imports = extractImports(filePath);

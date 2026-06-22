@@ -50,7 +50,7 @@ function collectStoreFiles(dir: string): string[] {
       const stat = fs.statSync(p);
       if (stat.isDirectory()) {
         if (!SKIP_DIRS.has(file)) walk(p);
-      } else if (/\.(m?[tj]s)$/.test(p)) {
+      } else if (/\.(m?[tj]sx?)$/.test(p)) {
         list.push(p);
       }
     }
@@ -143,7 +143,50 @@ export async function handleGetStoreDetail(args: any) {
 
   storeInfo.imports = extractImports(filePath);
 
+  const fileVariables = new Map<string, any>();
+
   traverse(ast, {
+    // Collect local variables to support referencing declared variables (like RTK initialState)
+    VariableDeclarator(p: any) {
+      if (p.node.id.type === "Identifier" && p.node.init) {
+        fileVariables.set(p.node.id.name, p.node.init);
+      }
+
+      // Jotai: const countAtom = atom(...)
+      const init = p.node.init;
+      if (
+        init &&
+        init.type === "CallExpression" &&
+        init.callee.type === "Identifier" &&
+        init.callee.name === "atom" &&
+        p.node.id.type === "Identifier"
+      ) {
+        const name = p.node.id.name;
+        const argsList = init.arguments;
+        if (argsList.length === 0) {
+          storeInfo.state.push(name);
+        } else {
+          const firstArg = argsList[0];
+          if (
+            firstArg.type === "ArrowFunctionExpression" ||
+            firstArg.type === "FunctionExpression"
+          ) {
+            storeInfo.getters.push(name);
+          } else {
+            storeInfo.state.push(name);
+          }
+          if (argsList.length >= 2) {
+            const secondArg = argsList[1];
+            if (
+              secondArg.type === "ArrowFunctionExpression" ||
+              secondArg.type === "FunctionExpression"
+            ) {
+              storeInfo.actions.push(name);
+            }
+          }
+        }
+      }
+    },
     // Vuex Option Store: state: { ... } / getters: { ... } / actions: { ... }
     ObjectExpression(p: any) {
       let name = "";
@@ -172,81 +215,182 @@ export async function handleGetStoreDetail(args: any) {
         });
       }
     },
-    // Pinia Setup Store: defineStore('id', () => { ... })
+    // Pinia, Zustand, Redux Toolkit
     CallExpression(p: any) {
       const callee = p.node.callee;
-      if (callee.type !== "Identifier" || callee.name !== "defineStore") return;
 
-      let factoryArg = p.node.arguments[1];
-      if (
-        !factoryArg &&
-        p.node.arguments[0] &&
-        (p.node.arguments[0].type === "ArrowFunctionExpression" ||
-          p.node.arguments[0].type === "FunctionExpression")
-      ) {
-        factoryArg = p.node.arguments[0];
+      // Pinia Setup Store: defineStore('id', () => { ... })
+      if (callee.type === "Identifier" && callee.name === "defineStore") {
+        let factoryArg = p.node.arguments[1];
+        if (
+          !factoryArg &&
+          p.node.arguments[0] &&
+          (p.node.arguments[0].type === "ArrowFunctionExpression" ||
+            p.node.arguments[0].type === "FunctionExpression")
+        ) {
+          factoryArg = p.node.arguments[0];
+        }
+
+        if (
+          !factoryArg ||
+          (factoryArg.type !== "ArrowFunctionExpression" &&
+            factoryArg.type !== "FunctionExpression")
+        )
+          return;
+
+        const body = factoryArg.body;
+        if (body.type !== "BlockStatement") return;
+
+        const localDecls = new Map<string, "state" | "getter" | "action">();
+
+        const inspectDeclarator = (decl: any) => {
+          if (decl.id?.type !== "Identifier") return;
+          const { init } = decl;
+          if (!init) return;
+          if (init.type === "CallExpression" && init.callee.type === "Identifier") {
+            const fn = init.callee.name;
+            if (fn === "ref" || fn === "reactive") localDecls.set(decl.id.name, "state");
+            else if (fn === "computed") localDecls.set(decl.id.name, "getter");
+          } else if (
+            init.type === "ArrowFunctionExpression" ||
+            init.type === "FunctionExpression"
+          ) {
+            localDecls.set(decl.id.name, "action");
+          }
+        };
+
+        body.body.forEach((stmt: any) => {
+          if (stmt.type === "VariableDeclaration") {
+            stmt.declarations.forEach(inspectDeclarator);
+          } else if (stmt.type === "FunctionDeclaration" && stmt.id) {
+            localDecls.set(stmt.id.name, "action");
+          }
+        });
+
+        body.body.forEach((stmt: any) => {
+          if (
+            stmt.type === "ReturnStatement" &&
+            stmt.argument?.type === "ObjectExpression"
+          ) {
+            stmt.argument.properties.forEach((prop: any) => {
+              if (prop.type !== "ObjectProperty") return;
+              const key = prop.key.name ?? prop.key.value;
+              if (!key) return;
+              const kind = localDecls.get(key);
+              if (kind === "state") storeInfo.state.push(key);
+              else if (kind === "getter") storeInfo.getters.push(key);
+              else if (kind === "action") storeInfo.actions.push(key);
+              else {
+                const v = prop.value;
+                if (v?.type === "ArrowFunctionExpression" || v?.type === "FunctionExpression") {
+                  storeInfo.actions.push(key);
+                } else {
+                  storeInfo.state.push(key);
+                }
+              }
+            });
+          }
+        });
       }
 
-      if (
-        !factoryArg ||
-        (factoryArg.type !== "ArrowFunctionExpression" &&
-          factoryArg.type !== "FunctionExpression")
-      )
-        return;
+      // Zustand: create(...) or create<T>()(...)
+      let isZustand = false;
+      let zustandCallback: any = null;
+      if (callee.type === "Identifier" && callee.name === "create") {
+        isZustand = true;
+        zustandCallback = p.node.arguments[0];
+      } else if (
+        callee.type === "CallExpression" &&
+        callee.callee.type === "Identifier" &&
+        callee.callee.name === "create"
+      ) {
+        isZustand = true;
+        zustandCallback = p.node.arguments[0];
+      }
 
-      const body = factoryArg.body;
-      if (body.type !== "BlockStatement") return;
-
-      const localDecls = new Map<string, "state" | "getter" | "action">();
-
-      const inspectDeclarator = (decl: any) => {
-        if (decl.id?.type !== "Identifier") return;
-        const { init } = decl;
-        if (!init) return;
-        if (init.type === "CallExpression" && init.callee.type === "Identifier") {
-          const fn = init.callee.name;
-          if (fn === "ref" || fn === "reactive") localDecls.set(decl.id.name, "state");
-          else if (fn === "computed") localDecls.set(decl.id.name, "getter");
-        } else if (
-          init.type === "ArrowFunctionExpression" ||
-          init.type === "FunctionExpression"
-        ) {
-          localDecls.set(decl.id.name, "action");
-        }
-      };
-
-      body.body.forEach((stmt: any) => {
-        if (stmt.type === "VariableDeclaration") {
-          stmt.declarations.forEach(inspectDeclarator);
-        } else if (stmt.type === "FunctionDeclaration" && stmt.id) {
-          localDecls.set(stmt.id.name, "action");
-        }
-      });
-
-      body.body.forEach((stmt: any) => {
-        if (
-          stmt.type === "ReturnStatement" &&
-          stmt.argument?.type === "ObjectExpression"
-        ) {
-          stmt.argument.properties.forEach((prop: any) => {
-            if (prop.type !== "ObjectProperty") return;
-            const key = prop.key.name ?? prop.key.value;
-            if (!key) return;
-            const kind = localDecls.get(key);
-            if (kind === "state") storeInfo.state.push(key);
-            else if (kind === "getter") storeInfo.getters.push(key);
-            else if (kind === "action") storeInfo.actions.push(key);
-            else {
-              const v = prop.value;
-              if (v?.type === "ArrowFunctionExpression" || v?.type === "FunctionExpression") {
-                storeInfo.actions.push(key);
-              } else {
-                storeInfo.state.push(key);
+      if (isZustand && zustandCallback) {
+        const parseZustandObject = (objNode: any) => {
+          objNode.properties.forEach((prop: any) => {
+            if (prop.type === "ObjectMethod") {
+              const key = prop.key.name ?? prop.key.value;
+              if (key) storeInfo.actions.push(key);
+            } else if (prop.type === "ObjectProperty") {
+              const key = prop.key.name ?? prop.key.value;
+              if (key) {
+                const val = prop.value;
+                if (
+                  val.type === "ArrowFunctionExpression" ||
+                  val.type === "FunctionExpression"
+                ) {
+                  storeInfo.actions.push(key);
+                } else {
+                  storeInfo.state.push(key);
+                }
               }
             }
           });
+        };
+
+        if (
+          zustandCallback.type === "ArrowFunctionExpression" ||
+          zustandCallback.type === "FunctionExpression"
+        ) {
+          const body = zustandCallback.body;
+          if (body.type === "ObjectExpression") {
+            parseZustandObject(body);
+          } else if (body.type === "BlockStatement") {
+            const ret = body.body.find((stmt: any) => stmt.type === "ReturnStatement");
+            if (ret && ret.argument && ret.argument.type === "ObjectExpression") {
+              parseZustandObject(ret.argument);
+            }
+          }
         }
-      });
+      }
+
+      // Redux Toolkit: createSlice(...)
+      if (callee.type === "Identifier" && callee.name === "createSlice") {
+        const arg = p.node.arguments[0];
+        if (arg && arg.type === "ObjectExpression") {
+          const initialStateProp = arg.properties.find(
+            (prop: any) =>
+              (prop.type === "ObjectProperty" || prop.type === "ObjectMethod") &&
+              (prop.key.name === "initialState" || prop.key.value === "initialState")
+          );
+          const reducersProp = arg.properties.find(
+            (prop: any) =>
+              (prop.type === "ObjectProperty" || prop.type === "ObjectMethod") &&
+              (prop.key.name === "reducers" || prop.key.value === "reducers")
+          );
+
+          if (initialStateProp && initialStateProp.type === "ObjectProperty") {
+            let val = initialStateProp.value;
+            if (val.type === "Identifier") {
+              const lookedUp = fileVariables.get(val.name);
+              if (lookedUp) val = lookedUp;
+            }
+            if (val.type === "ObjectExpression") {
+              val.properties.forEach((prop: any) => {
+                const key = prop.key.name ?? prop.key.value;
+                if (key) storeInfo.state.push(key);
+              });
+            }
+          }
+
+          if (reducersProp && reducersProp.type === "ObjectProperty") {
+            let val = reducersProp.value;
+            if (val.type === "Identifier") {
+              const lookedUp = fileVariables.get(val.name);
+              if (lookedUp) val = lookedUp;
+            }
+            if (val.type === "ObjectExpression") {
+              val.properties.forEach((prop: any) => {
+                const key = prop.key.name ?? prop.key.value;
+                if (key) storeInfo.actions.push(key);
+              });
+            }
+          }
+        }
+      }
     },
   });
 
