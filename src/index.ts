@@ -227,30 +227,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       // 遍历抽象语法树，提取 Pinia / Vuex 结构
       traverse(ast, {
-        ObjectMethod(p: any) {
-          const parentKey = p.parentPath?.parent?.key?.name;
-          if (parentKey === 'actions') {
-            storeInfo.actions.push(p.node.key.name);
-          } else if (parentKey === 'getters') {
-            storeInfo.getters.push(p.node.key.name);
+        ObjectExpression(p: any) {
+          let name = '';
+          if (p.parent.type === 'VariableDeclarator' && p.parent.id) {
+            name = p.parent.id.name; // const state = { ... }
+          } else if (p.parent.type === 'ObjectProperty' && p.parent.key) {
+            name = p.parent.key.name; // export default { state: { ... } }
+          }
+          
+          if (name === 'state' || name === 'getters' || name === 'actions') {
+            p.node.properties.forEach((prop: any) => {
+              if (prop.key && prop.key.name) {
+                if (name === 'state') storeInfo.state.push(prop.key.name);
+                if (name === 'getters') storeInfo.getters.push(prop.key.name);
+                if (name === 'actions') storeInfo.actions.push(prop.key.name);
+              }
+            });
           }
         },
-        ObjectProperty(p: any) {
-          const parentKey = p.parentPath?.parent?.key?.name;
-          if (parentKey === 'actions' && (p.node.value.type === 'ArrowFunctionExpression' || p.node.value.type === 'FunctionExpression')) {
-            storeInfo.actions.push(p.node.key.name);
-          } else if (parentKey === 'getters' && (p.node.value.type === 'ArrowFunctionExpression' || p.node.value.type === 'FunctionExpression')) {
-            storeInfo.getters.push(p.node.key.name);
-          } else if (p.node.key.name === 'state' && p.node.value.type === 'ArrowFunctionExpression') {
-             const body = p.node.value.body;
-             if (body.type === 'ObjectExpression') {
-                 body.properties.forEach((prop: any) => {
-                   if (prop.key?.name) storeInfo.state.push(prop.key.name);
-                 });
-             }
+        ArrowFunctionExpression(p: any) {
+          let name = '';
+          if (p.parent.type === 'ObjectProperty' && p.parent.key) {
+            name = p.parent.key.name; // Pinia: state: () => ({ ... })
+          }
+          
+          if (name === 'state' && p.node.body.type === 'ObjectExpression') {
+             p.node.body.properties.forEach((prop: any) => {
+               if (prop.key && prop.key.name) storeInfo.state.push(prop.key.name);
+             });
           }
         }
       });
+      
+      // 去重，防止某些情况被 AST 重复命中
+      storeInfo.state = [...new Set(storeInfo.state)];
+      storeInfo.getters = [...new Set(storeInfo.getters)];
+      storeInfo.actions = [...new Set(storeInfo.actions)];
       
       return {
         content: [{ type: "text", text: JSON.stringify(storeInfo, null, 2) }]
