@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-06-23
+
+### Added
+- **Composables / Hooks 分析** (`search_composables`, `get_composable_detail`)：
+  - 扫描 `composables/`、`hooks/` 等目录下所有 `useXxx` 风格函数文件。
+  - AST 提取完整函数签名：参数名、TypeScript 类型、是否可选、默认值。
+  - 提取返回值对象字段列表（基于返回类型注解或函数体最后一个 `return {}` 语句）。
+  - 提取 JSDoc 注释描述。
+- **页面组件树分析** (`analyze_page`)：
+  - 输入任意页面文件，递归解析其所有组件导入依赖，构建完整的组件依赖树。
+  - 内置循环引用检测（每条路径独立 visited 集合），防止无限递归。
+  - 支持 `maxDepth` 参数控制递归深度（默认 5，最大 10）。
+  - 输出去重后的总组件数量统计。
+- **Auto-import 感知**（增强 `get_component_usages`）：
+  - 自动读取 `vite.config.ts` 中 `unplugin-vue-components` 的 `dirs` 配置。
+  - 将自动注册目录下的组件纳入模板标签扫描范围，识别无显式 `import` 的模板引用。
+  - 结果中对 auto-import 命中的引用标注 `autoImported: true` 字段。
+- **独立类型文件索引** (`search_types`, `get_type_detail`)：
+  - 扫描 `types/`、`interfaces/`、`models/` 等目录下的所有 `.ts` 文件。
+  - AST 提取 `interface`、`type alias`（含对象字面量成员）、`enum` 三类定义。
+  - 每个成员提取：字段名、TS 类型字符串、是否可选、JSDoc 行内注释。
+  - 支持按类型名精确查询（`typeName` 参数）。
+
+---
+
 ## [1.3.0] - 2026-06-23
 
 ### Added

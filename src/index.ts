@@ -14,12 +14,15 @@ import { toolSchemas } from "./tools/schemas.js";
 import { handleSearchComponents, handleGetComponentDetail } from "./tools/components.js";
 import { handleSearchStores, handleGetStoreDetail } from "./tools/stores.js";
 import { handleGetComponentUsages } from "./tools/usages.js";
+import { handleSearchComposables, handleGetComposableDetail } from "./tools/composables.js";
+import { handleAnalyzePage } from "./tools/page.js";
+import { handleSearchTypes, handleGetTypeDetail } from "./tools/types.js";
 import { stopAllWatchers } from "./utils/index-cache.js";
 
 const server = new Server(
   {
     name: "local-component-mcp",
-    version: "1.0.0",
+    version: "1.4.0",
   },
   {
     capabilities: {
@@ -53,6 +56,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "get_store_detail":
         return await handleGetStoreDetail(args);
+
+      case "search_composables":
+        return await handleSearchComposables(args);
+
+      case "get_composable_detail":
+        return await handleGetComposableDetail(args);
+
+      case "analyze_page":
+        return await handleAnalyzePage(args);
+
+      case "search_types":
+        return await handleSearchTypes(args);
+
+      case "get_type_detail":
+        return await handleGetTypeDetail(args);
 
       default:
         throw new McpError(-32601, `Unknown tool: ${name}`);

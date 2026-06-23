@@ -5,6 +5,7 @@ import _traverse from "@babel/traverse";
 import { resolveAliasPath } from "../alias.js";
 import { scanCodeFiles, extractScriptBlock } from "./files.js";
 import { queryImporters } from "./index-cache.js";
+import { getAutoImportConfig } from "./auto-import.js";
 
 const traverse = _traverse.default || _traverse;
 
@@ -183,6 +184,7 @@ function scanFileLines(
 /**
  * 在 projectRoot 范围内找到所有引用了 targetPath 组件的文件及具体行号
  * 使用内存索引优先过滤候选文件，大幅减少全量文件扫描次数
+ * 同时感知 unplugin-vue-components 自动注册（Auto-import）
  */
 export function findComponentUsages(targetPath: string, projectRoot: string): UsageInfo[] {
   const targetAbs = path.resolve(targetPath);
@@ -196,7 +198,11 @@ export function findComponentUsages(targetPath: string, projectRoot: string): Us
   // Step 1: 通过索引快速获取所有 import 了该组件的文件（精确命中）
   const importers = new Set(queryImporters(projectRoot, targetNoExt));
 
-  // Step 2: 全量文件列表（排除目标文件自身）
+  // Step 2: 检测 auto-import 配置，判断该组件是否被自动注册
+  const autoImportCfg = getAutoImportConfig(projectRoot);
+  const isAutoImported = autoImportCfg.components.get(targetBaseName) === targetAbs;
+
+  // Step 3: 全量文件列表（排除目标文件自身）
   const allFiles = scanCodeFiles(projectRoot).filter((f) => f !== targetAbs);
 
   const usages: UsageInfo[] = [];
@@ -217,7 +223,7 @@ export function findComponentUsages(targetPath: string, projectRoot: string): Us
         localNames = resolved.localNames;
         if (localNames.size === 0) localNames.add(targetBaseName);
       } else {
-        // 全局注册的组件：直接读取内容，用原始组件名扫描模板
+        // 全局注册的组件（含 auto-import）：直接读取内容，用原始组件名扫描模板
         content = fs.readFileSync(file, "utf-8");
         importsComponent = false;
         localNames = new Set([targetBaseName]);
@@ -225,7 +231,9 @@ export function findComponentUsages(targetPath: string, projectRoot: string): Us
 
       const matches = scanFileLines(content, importsComponent, localNames, targetBaseName);
 
-      // 对非 importer 文件，只保留 template 类型（避免误报脚本噪音）
+      // 对非 importer 文件：
+      //   - auto-import 组件：保留 template 类型的匹配
+      //   - 普通全局注册：同样只保留 template 类型
       const filteredMatches = isImporter
         ? matches
         : matches.filter((m) => m.type === "template");
@@ -235,7 +243,8 @@ export function findComponentUsages(targetPath: string, projectRoot: string): Us
           filePath: file,
           relativeFilePath: path.relative(projectRoot, file),
           matches: filteredMatches,
-        });
+          ...(isAutoImported && !isImporter ? { autoImported: true } : {}),
+        } as UsageInfo & { autoImported?: boolean });
       }
     } catch (error) {
       console.error(`处理文件引用时出错 ${file}:`, error);
