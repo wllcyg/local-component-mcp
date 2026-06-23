@@ -28,8 +28,13 @@ The root cause: default RAG retrieves raw source files, which are full of busine
 - **Up to 80% token savings** compared to sending full component files
 - **Zero hallucinations** on prop names, types, defaults, and required fields
 - **Store analysis** for Pinia, Vuex, Zustand, Redux Toolkit, and Jotai
+- **Composables / Hooks analysis** — extracts `useXxx` signatures, param types, return shapes, and JSDoc
+- **Page component tree** — recursively resolves all component dependencies of a page file
+- **Auto-import awareness** — detects `unplugin-vue-components` config, finds template usages without explicit imports
+- **TypeScript type indexing** — extracts `interface`, `type alias`, and `enum` definitions from type files
 - **Reverse usage lookup** — find every file that imports a given component
-- **Path alias support** — reads `tsconfig.json`, `vite.config.ts`, `vue.config.js` automatically; alias config is cached with mtime awareness and reloads without restart
+- **Path alias support** — reads `tsconfig.json`, `vite.config.ts`, `vue.config.js` automatically
+- **In-memory Watch mode** — file watcher keeps the import index hot; queries read from memory, not disk
 - **Zero maintenance** — code is the source of truth; no JSON configs or wikis to keep updated
 
 ### Installation
@@ -68,9 +73,14 @@ claude mcp add local-component-mcp -- npx -y @wllcyg001/local-component-mcp
 |------|-------------|
 | `search_components` | Scan a directory for `.vue` / `.tsx` / `.jsx` files, with optional keyword filter |
 | `get_component_detail` | AST-parse a component and return its Props, Events, Slots, comments, and imports |
-| `get_component_usages` | Find every file that imports a given component, with line numbers |
-| `search_stores` | Scan a workspace for Pinia / Vuex / Zustand / Redux store files |
+| `get_component_usages` | Find every file that imports or uses a given component, with line numbers. Auto-import aware. |
+| `search_stores` | Scan a workspace for Pinia / Vuex / Zustand / Redux / Jotai store files |
 | `get_store_detail` | Parse a store file and return its state fields, getters, and actions |
+| `search_composables` | Scan `composables/` and `hooks/` dirs for all `useXxx` functions |
+| `get_composable_detail` | Parse a composable file and return full signatures: param types, defaults, return fields, JSDoc |
+| `analyze_page` | Recursively resolve all component dependencies of a page file and return the full component tree |
+| `search_types` | Scan `types/` / `interfaces/` dirs for `interface`, `type`, and `enum` definitions |
+| `get_type_detail` | Parse a type file and return all member definitions with types, optionality, and JSDoc |
 
 All tools support **alias paths** (e.g., `@/components/ProTable.vue`).
 
@@ -85,16 +95,14 @@ All tools support **alias paths** (e.g., `@/components/ProTable.vue`).
 **Safe refactoring:**
 > "I'm changing the `size` prop of `MyButton.vue` from a string to an enum. Find every file in the project that uses this component and show me what value they're passing to `size`."
 
-### 🗺️ Coming Soon / Roadmap
+**Understand a page before editing:**
+> "Run `analyze_page` on `@/views/OrderDetail.vue` and show me which components it uses and how they nest."
 
-We are continuously expanding the capabilities of this MCP server. Key features under planning include:
-- **Router Map Analysis** — indexing `vue-router` / `react-router` definitions.
-- **I18n Translation Keys Discovery** — reverse searching translation keys for AI generation.
-- **API Endpoints Discovery** — exposing API fetch signatures and schemas.
-- **Utils & Hooks Discovery** — scanning common hooks to reuse logic.
-- **Design System Tokens Integration** — bridging design variables.
+**Reuse existing business logic:**
+> "Search composables in `@/composables`, find anything related to permissions or auth, then show me the full signature of that hook."
 
-Check out our [ROADMAP.md](ROADMAP.md) for details.
+**Type-safe code generation:**
+> "Look up the `OrderDetail` type in `@/types/order.ts`, then generate a function that processes it correctly without making up any fields."
 
 ---
 
@@ -116,8 +124,13 @@ Check out our [ROADMAP.md](ROADMAP.md) for details.
 - **节省高达 80% Token**：相比直接发送完整组件文件
 - **零幻觉**：prop 名称、类型、默认值、必填项全部精准
 - **状态管理分析**：支持 Pinia、Vuex、Zustand、Redux Toolkit、Jotai
+- **Composables / Hooks 分析**：提取 `useXxx` 函数签名、参数类型、默认值、返回值字段及 JSDoc
+- **页面组件树**：递归解析页面文件的完整组件依赖树
+- **Auto-import 感知**：自动检测 `unplugin-vue-components` 配置，识别无显式 import 的模板引用
+- **TypeScript 类型索引**：提取 `interface`、`type alias`、`enum` 定义的完整成员信息
 - **逆向引用查找**：全项目扫描某组件被哪些文件引用
 - **路径别名支持**：自动读取 `tsconfig.json`、`vite.config.ts`、`vue.config.js`；别名配置带 mtime 缓存，修改后自动重载无需重启
+- **内存 Watch 模式**：文件监听器保持导入索引热更新，查询直接读内存而非磁盘
 - **零维护成本**：代码即文档，AI 每次查询都是最新状态
 
 ### 安装配置
@@ -156,9 +169,14 @@ claude mcp add local-component-mcp -- npx -y @wllcyg001/local-component-mcp
 |------|------|
 | `search_components` | 扫描指定目录下的 `.vue` / `.tsx` / `.jsx` 文件，支持关键字过滤 |
 | `get_component_detail` | AST 解析组件，返回 Props、Events、Slots、注释及 imports |
-| `get_component_usages` | 全项目查找某组件的所有引用位置，含行号 |
-| `search_stores` | 扫描工作区下所有 Pinia / Vuex / Zustand / Redux store 文件 |
+| `get_component_usages` | 全项目查找某组件的所有引用位置，含行号。支持 Auto-import 感知。 |
+| `search_stores` | 扫描工作区下所有 Pinia / Vuex / Zustand / Redux / Jotai store 文件 |
 | `get_store_detail` | 解析 store 文件，返回 state 字段、getters、actions 列表 |
+| `search_composables` | 扫描 `composables/` 和 `hooks/` 目录下所有 `useXxx` 函数 |
+| `get_composable_detail` | 解析 composable 文件，返回完整函数签名：参数类型、默认值、返回值字段、JSDoc |
+| `analyze_page` | 递归解析页面文件的所有组件依赖，返回完整组件树 |
+| `search_types` | 扫描 `types/` / `interfaces/` 目录下的 `interface`、`type`、`enum` 定义 |
+| `get_type_detail` | 解析类型文件，返回所有成员的字段名、TS 类型、是否可选及 JSDoc 注释 |
 
 所有工具均支持**别名路径**（如 `@/components/ProTable.vue`）。
 
@@ -173,16 +191,14 @@ claude mcp add local-component-mcp -- npx -y @wllcyg001/local-component-mcp
 **安全重构：**
 > "我要把 `MyButton.vue` 的 `size` prop 从字符串改为枚举，帮我查整个项目里哪些文件引用了它，分别传了什么值。"
 
-### 🗺️ 近期路线图 (Roadmap)
+**修改页面前先了解架构：**
+> "用 `analyze_page` 分析 `@/views/OrderDetail.vue`，告诉我这个页面用了哪些组件、层级关系是什么。"
 
-我们正在积极扩展该 MCP Server 的能力，计划在后续版本引入：
-- **路由映射分析** — 解析 `vue-router` / `react-router` 的配置文件。
-- **I18n 字典解析** — 逆向搜索多语言 Key，消除 AI 硬编码。
-- **API 服务发现** — 解析项目中的接口请求签名与入参结构。
-- **Hooks 与公用函数发现** — 扫描公共函数与自定义 Hooks。
-- **设计系统变量对接** — 引入 Design Tokens 规范。
+**复用现有业务逻辑：**
+> "搜索 `@/composables` 下的所有 hooks，找跟权限或登录相关的，然后给我看那个 hook 的完整参数签名。"
 
-更详尽的排期与状态请参考 [ROADMAP.md](ROADMAP.md)。
+**类型安全的代码生成：**
+> "查一下 `@/types/order.ts` 里的 `OrderDetail` 类型定义，然后帮我写一个处理它的函数，不要自己捏造字段。"
 
 ---
 
