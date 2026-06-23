@@ -18,6 +18,7 @@
     "@babel/traverse": "^7.24.0",
     "@modelcontextprotocol/sdk": "^0.6.0",
     "react-docgen": "^8.0.3",
+    "tiktoken": "^1.0.22",
     "vue-docgen-api": "^4.75.1"
   },
   "devDependencies": {
