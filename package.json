@@ -1,8 +1,19 @@
 {
   "name": "@wllcyg001/local-component-mcp",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "private": false,
-  "description": "MCP server for parsing local Vue components",
+  "description": "AST-powered MCP server for Vue/React component analysis — eliminates AI hallucinations on local business components",
+  "keywords": [
+    "mcp",
+    "vue",
+    "react",
+    "ast",
+    "component",
+    "cursor",
+    "claude",
+    "ai",
+    "codegen"
+  ],
   "main": "build/index.js",
   "type": "module",
   "bin": {
@@ -18,9 +29,8 @@
   "dependencies": {
     "@babel/parser": "^7.24.0",
     "@babel/traverse": "^7.24.0",
-    "@modelcontextprotocol/sdk": "^0.6.0",
+    "@modelcontextprotocol/sdk": "^1.0.1",
     "react-docgen": "^8.0.3",
-    "tiktoken": "^1.0.22",
     "vue-docgen-api": "^4.75.1"
   },
   "devDependencies": {

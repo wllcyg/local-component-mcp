@@ -85,6 +85,17 @@ All tools support **alias paths** (e.g., `@/components/ProTable.vue`).
 **Safe refactoring:**
 > "I'm changing the `size` prop of `MyButton.vue` from a string to an enum. Find every file in the project that uses this component and show me what value they're passing to `size`."
 
+### 🗺️ Coming Soon / Roadmap
+
+We are continuously expanding the capabilities of this MCP server. Key features under planning include:
+- **Router Map Analysis** — indexing `vue-router` / `react-router` definitions.
+- **I18n Translation Keys Discovery** — reverse searching translation keys for AI generation.
+- **API Endpoints Discovery** — exposing API fetch signatures and schemas.
+- **Utils & Hooks Discovery** — scanning common hooks to reuse logic.
+- **Design System Tokens Integration** — bridging design variables.
+
+Check out our [ROADMAP.md](ROADMAP.md) for details.
+
 ---
 
 ## 中文
@@ -161,6 +172,17 @@ claude mcp add local-component-mcp -- npx -y @wllcyg001/local-component-mcp
 
 **安全重构：**
 > "我要把 `MyButton.vue` 的 `size` prop 从字符串改为枚举，帮我查整个项目里哪些文件引用了它，分别传了什么值。"
+
+### 🗺️ 近期路线图 (Roadmap)
+
+我们正在积极扩展该 MCP Server 的能力，计划在后续版本引入：
+- **路由映射分析** — 解析 `vue-router` / `react-router` 的配置文件。
+- **I18n 字典解析** — 逆向搜索多语言 Key，消除 AI 硬编码。
+- **API 服务发现** — 解析项目中的接口请求签名与入参结构。
+- **Hooks 与公用函数发现** — 扫描公共函数与自定义 Hooks。
+- **设计系统变量对接** — 引入 Design Tokens 规范。
+
+更详尽的排期与状态请参考 [ROADMAP.md](ROADMAP.md)。
 
 ---
 
