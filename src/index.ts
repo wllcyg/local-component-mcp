@@ -14,6 +14,7 @@ import { toolSchemas } from "./tools/schemas.js";
 import { handleSearchComponents, handleGetComponentDetail } from "./tools/components.js";
 import { handleSearchStores, handleGetStoreDetail } from "./tools/stores.js";
 import { handleGetComponentUsages } from "./tools/usages.js";
+import { stopAllWatchers } from "./utils/index-cache.js";
 
 const server = new Server(
   {
@@ -69,6 +70,14 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Local Component MCP Server running on stdio");
+
+  // Graceful shutdown: close all fs.watch instances
+  const shutdown = () => {
+    stopAllWatchers();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 main().catch((error) => {

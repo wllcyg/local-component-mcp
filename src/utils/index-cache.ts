@@ -14,12 +14,21 @@ interface FileIndexEntry {
   importedPaths: Set<string>;
 }
 
-/** 项目根 → 文件索引 */
-const projectIndexCache = new Map<string, Map<string, FileIndexEntry>>();
+interface WatchState {
+  index: Map<string, FileIndexEntry>;
+  watcher: fs.FSWatcher | null;
+  /** 防抖 timer，key = 文件路径 */
+  debounceTimers: Map<string, ReturnType<typeof setTimeout>>;
+}
 
-/**
- * 对单个文件提取 import 路径（去掉扩展名以便比较），若已有缓存且 mtime 未变则跳过
- */
+// ─────────────────────────────────────────────
+// 单例：所有已监听的项目根 → WatchState
+// ─────────────────────────────────────────────
+const watchedRoots = new Map<string, WatchState>();
+
+// ─────────────────────────────────────────────
+// 底层：对单个文件执行增量索引
+// ─────────────────────────────────────────────
 function indexFile(
   file: string,
   fileDir: string,
@@ -63,32 +72,144 @@ function indexFile(
   index.set(file, { mtime, importedPaths });
 }
 
-/**
- * 为 projectRoot 构建/增量更新内存索引
- */
-export function buildIndex(projectRoot: string): Map<string, FileIndexEntry> {
-  if (!projectIndexCache.has(projectRoot)) {
-    projectIndexCache.set(projectRoot, new Map());
-  }
-  const index = projectIndexCache.get(projectRoot)!;
+// ─────────────────────────────────────────────
+// 全量扫描并初始化 index
+// ─────────────────────────────────────────────
+function fullScan(projectRoot: string, index: Map<string, FileIndexEntry>): void {
   const files = scanCodeFiles(projectRoot);
-
-  // 删除已经不存在的文件条目
   const fileSet = new Set(files);
+
+  // 清理已删除文件的条目
   for (const key of index.keys()) {
     if (!fileSet.has(key)) index.delete(key);
   }
 
-  // 新增/更新条目
+  // 新增 / 增量更新
   for (const file of files) {
     indexFile(file, path.dirname(file), index);
   }
-  return index;
 }
 
-/**
- * 查询哪些文件引用了 targetNoExt（无扩展名绝对路径）
- */
+// ─────────────────────────────────────────────
+// 处理 watcher 事件（含 150ms 防抖）
+// ─────────────────────────────────────────────
+function handleWatchEvent(
+  projectRoot: string,
+  state: WatchState,
+  eventType: string,
+  filename: string | null
+): void {
+  if (!filename) return;
+
+  // fs.watch 返回的 filename 是相对于监听目录的相对路径
+  const absPath = path.resolve(projectRoot, filename);
+
+  // 只处理代码文件
+  if (!/\.(vue|[mc]?[tj]sx?)$/.test(absPath)) return;
+
+  // 清除旧的防抖 timer
+  const existing = state.debounceTimers.get(absPath);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(() => {
+    state.debounceTimers.delete(absPath);
+
+    if (!fs.existsSync(absPath)) {
+      // 文件已删除 → 从 index 移除
+      if (state.index.has(absPath)) {
+        state.index.delete(absPath);
+        console.error(`[watch] removed: ${absPath}`);
+      }
+    } else {
+      // 文件新增或变更 → 增量重新索引
+      const prevMtime = state.index.get(absPath)?.mtime ?? -1;
+      indexFile(absPath, path.dirname(absPath), state.index);
+      const newMtime = state.index.get(absPath)?.mtime ?? -1;
+      if (newMtime !== prevMtime) {
+        console.error(`[watch] updated: ${absPath}`);
+      }
+    }
+  }, 150);
+
+  state.debounceTimers.set(absPath, timer);
+}
+
+// ─────────────────────────────────────────────
+// 对外 API：确保 projectRoot 已被监听
+// ─────────────────────────────────────────────
+function ensureWatching(projectRoot: string): WatchState {
+  if (watchedRoots.has(projectRoot)) {
+    return watchedRoots.get(projectRoot)!;
+  }
+
+  const state: WatchState = {
+    index: new Map(),
+    watcher: null,
+    debounceTimers: new Map(),
+  };
+  watchedRoots.set(projectRoot, state);
+
+  // 首次全量扫描
+  fullScan(projectRoot, state.index);
+
+  // 启动 watcher（recursive 支持 macOS / Windows；Linux 需逐级监听，此处统一尝试）
+  try {
+    state.watcher = fs.watch(
+      projectRoot,
+      { recursive: true },
+      (eventType, filename) => {
+        handleWatchEvent(projectRoot, state, eventType, filename);
+      }
+    );
+
+    // watcher 出错时静默降级（不影响功能，只是变回按需扫描）
+    state.watcher.on("error", (err) => {
+      console.error(`[watch] watcher error for ${projectRoot}:`, err.message);
+      state.watcher?.close();
+      state.watcher = null;
+    });
+
+    console.error(`[watch] watching: ${projectRoot}`);
+  } catch (err: any) {
+    // fs.watch recursive 在某些 Linux 环境不支持，静默降级
+    console.error(`[watch] fs.watch unavailable for ${projectRoot}, falling back to on-demand scan: ${err.message}`);
+    state.watcher = null;
+  }
+
+  return state;
+}
+
+// ─────────────────────────────────────────────
+// 停止所有 watcher（测试 / 优雅退出用）
+// ─────────────────────────────────────────────
+export function stopAllWatchers(): void {
+  for (const [root, state] of watchedRoots) {
+    // 清理所有防抖 timer
+    for (const t of state.debounceTimers.values()) clearTimeout(t);
+    state.debounceTimers.clear();
+    state.watcher?.close();
+    console.error(`[watch] stopped: ${root}`);
+  }
+  watchedRoots.clear();
+}
+
+// ─────────────────────────────────────────────
+// buildIndex：供 queryImporters 调用，接口不变
+// ─────────────────────────────────────────────
+export function buildIndex(projectRoot: string): Map<string, FileIndexEntry> {
+  const state = ensureWatching(projectRoot);
+
+  // 若 watcher 不可用（Linux 降级），则每次调用时做增量扫描（与旧行为一致）
+  if (!state.watcher) {
+    fullScan(projectRoot, state.index);
+  }
+
+  return state.index;
+}
+
+// ─────────────────────────────────────────────
+// queryImporters：接口不变
+// ─────────────────────────────────────────────
 export function queryImporters(
   projectRoot: string,
   targetNoExt: string
