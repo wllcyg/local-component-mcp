@@ -168,7 +168,8 @@ function extractAliasesFromJsTs(code: string, configDir: string): AliasRule[] {
                       if (prop.value.type === "StringLiteral") {
                         findVal = prop.value.value;
                       } else if (prop.value.type === "RegExpLiteral") {
-                        findVal = prop.value.pattern;
+                        // 用特殊前缀标记这是正则别名，方便 matchAlias 区分处理
+                        findVal = "__REGEX__:" + prop.value.pattern;
                       }
                     } else if (propKey === "replacement") {
                       replacementVal = evaluatePathNode(prop.value, configDir);
@@ -335,6 +336,20 @@ export function getAliasRules(projectRoot: string): AliasRule[] {
  * Matches a path against a rule. Returns resolved path if matched, null otherwise.
  */
 export function matchAlias(input: string, find: string, replacement: string): string | null {
+  // 处理 Vite 正则表达式别名，例如 find: /^\/src/
+  if (find.startsWith("__REGEX__:")) {
+    const pattern = find.slice("__REGEX__:".length);
+    try {
+      const regex = new RegExp(pattern);
+      if (regex.test(input)) {
+        return input.replace(regex, replacement);
+      }
+    } catch {
+      // 无效正则，直接跳过
+    }
+    return null;
+  }
+
   if (input === find) {
     return replacement;
   }

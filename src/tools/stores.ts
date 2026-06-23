@@ -128,11 +128,26 @@ export async function handleGetStoreDetail(args: any) {
     );
   }
 
-  const code = fs.readFileSync(filePath, "utf-8");
-  const ast = babelParser.parse(code, {
-    sourceType: "module",
-    plugins: ["typescript", "jsx"],
-  });
+  let ast: any;
+  try {
+    const code = fs.readFileSync(filePath, "utf-8");
+    ast = babelParser.parse(code, {
+      sourceType: "module",
+      plugins: ["typescript", "jsx"],
+    });
+  } catch (err: any) {
+    // store 文件语法错误时，优雅降级返回错误信息，而不是让 MCP 崩溃
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          __failedToParse: true,
+          __error: err?.message || String(err),
+          imports: extractImports(filePath),
+        }, null, 2),
+      }],
+    };
+  }
 
   const storeInfo = {
     state: [] as string[],

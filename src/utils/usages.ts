@@ -27,6 +27,11 @@ function toKebabCase(str: string): string {
     .toLowerCase();
 }
 
+/** 转义 RegExp 元字符，防止组件名含有 $、. 等特殊字符时构造出非法正则 */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 interface ResolvedFile {
   content: string;
   importsComponent: boolean;
@@ -77,12 +82,21 @@ function readAndResolve(
               const resolved = resolveAliasPath(arg.value, fileDir);
               if (resolved.replace(/\.[^/.]+$/, "") === targetNoExt) {
                 importsComponent = true;
-                const vd = p.parentPath?.parentPath;
-                if (
-                  vd?.type === "VariableDeclarator" &&
-                  vd.node.id?.type === "Identifier"
-                ) {
-                  localNames.add(vd.node.id.name);
+                // 支持多种动态导入写法，向上爬多层 AST 找到变量名：
+                // 1. const X = import('...')  → VariableDeclarator 在 parentPath.parentPath
+                // 2. const X = defineAsyncComponent(() => import('...'))
+                //    → import 所在 ArrowFunction → CallExpression(defineAsyncComponent) → VariableDeclarator
+                let cur: any = p.parentPath;
+                let found = false;
+                for (let i = 0; i < 6 && cur && !found; i++) {
+                  if (
+                    cur?.type === "VariableDeclarator" &&
+                    cur.node.id?.type === "Identifier"
+                  ) {
+                    localNames.add(cur.node.id.name);
+                    found = true;
+                  }
+                  cur = cur?.parentPath;
                 }
               }
             }
@@ -152,7 +166,7 @@ function scanFileLines(
 
       // 匹配脚本逻辑调用（排除 export/components 注册行）
       if (!line.includes("export") && !line.includes("components:")) {
-        if (new RegExp(`\\b${localName}\\b`).test(line)) {
+        if (new RegExp(`\\b${escapeRegex(localName)}\\b`).test(line)) {
           matches.push({ lineNumber, lineContent: line, type: "script" });
           matched = true;
           break;
@@ -173,7 +187,11 @@ function scanFileLines(
 export function findComponentUsages(targetPath: string, projectRoot: string): UsageInfo[] {
   const targetAbs = path.resolve(targetPath);
   const targetNoExt = targetAbs.replace(/\.[^/.]+$/, "");
-  const targetBaseName = path.basename(targetAbs, path.extname(targetAbs));
+  let targetBaseName = path.basename(targetAbs, path.extname(targetAbs));
+  if (targetBaseName.toLowerCase() === "index") {
+    // 如果文件名是 index，则向上取父级目录名称作为真实的组件名 (如 ImageUpload)
+    targetBaseName = path.basename(path.dirname(targetAbs));
+  }
 
   // Step 1: 通过索引快速获取所有 import 了该组件的文件（精确命中）
   const importers = new Set(queryImporters(projectRoot, targetNoExt));
