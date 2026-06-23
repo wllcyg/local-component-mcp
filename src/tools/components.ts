@@ -32,7 +32,12 @@ export async function handleSearchComponents(args: any) {
 
   let files = getComponentFiles(workspacePath);
   if (keyword) {
-    files = files.filter((f) => path.basename(f).toLowerCase().includes(keyword));
+    // 提取相对路径，替换斜杠并转小写，防止 workspacePath 里的关键字导致所有文件误匹配
+    // 这样既能搜到 "MyButton.vue"，也能搜到 "ImageUpload/index.vue"
+    files = files.filter((f) => {
+      const relPath = path.relative(workspacePath, f).replace(/\\/g, '/').toLowerCase();
+      return relPath.includes(keyword);
+    });
   }
 
   return {
