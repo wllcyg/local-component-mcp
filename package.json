@@ -1,6 +1,6 @@
 {
   "name": "@wllcyg001/local-component-mcp",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": false,
   "description": "AST-powered MCP server for Vue/React component analysis — eliminates AI hallucinations on local business components",
   "keywords": [
@@ -31,6 +31,8 @@
     "@babel/parser": "^7.24.0",
     "@babel/traverse": "^7.24.0",
     "@modelcontextprotocol/sdk": "^1.0.1",
+    "@vue/compiler-sfc": "^3.5.38",
+    "fast-glob": "^3.3.3",
     "react-docgen": "^8.0.3",
     "vue-docgen-api": "^4.75.1"
   },

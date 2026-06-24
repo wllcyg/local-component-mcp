@@ -81,6 +81,7 @@ claude mcp add local-component-mcp -- npx -y @wllcyg001/local-component-mcp
 | `analyze_page` | Recursively resolve all component dependencies of a page file and return the full component tree |
 | `search_types` | Scan `types/` / `interfaces/` dirs for `interface`, `type`, and `enum` definitions |
 | `get_type_detail` | Parse a type file and return all member definitions with types, optionality, and JSDoc |
+| `query_ast` | High-performance, language-aware AST pattern matching search across workspaces. Natively parses `.vue` (SFC), JSX/TSX, HTML, and JS/TS files. |
 
 All tools support **alias paths** (e.g., `@/components/ProTable.vue`).
 
@@ -103,6 +104,9 @@ All tools support **alias paths** (e.g., `@/components/ProTable.vue`).
 
 **Type-safe code generation:**
 > "Look up the `OrderDetail` type in `@/types/order.ts`, then generate a function that processes it correctly without making up any fields."
+
+**Semantic AST Pattern Matching:**
+> "Use `query_ast` to find every place where `ElMessage.success` is called with a specific variable pattern, and show me the exact arguments."
 
 ---
 
@@ -177,6 +181,7 @@ claude mcp add local-component-mcp -- npx -y @wllcyg001/local-component-mcp
 | `analyze_page` | 递归解析页面文件的所有组件依赖，返回完整组件树 |
 | `search_types` | 扫描 `types/` / `interfaces/` 目录下的 `interface`、`type`、`enum` 定义 |
 | `get_type_detail` | 解析类型文件，返回所有成员的字段名、TS 类型、是否可选及 JSDoc 注释 |
+| `query_ast` | 高性能的跨语言 AST 模式匹配查询工具。突破正则局限，深度支持解析 `.vue` 单文件组件、JSX/TSX、HTML 及脚本的结构化语义搜索。 |
 
 所有工具均支持**别名路径**（如 `@/components/ProTable.vue`）。
 
@@ -199,6 +204,9 @@ claude mcp add local-component-mcp -- npx -y @wllcyg001/local-component-mcp
 
 **类型安全的代码生成：**
 > "查一下 `@/types/order.ts` 里的 `OrderDetail` 类型定义，然后帮我写一个处理它的函数，不要自己捏造字段。"
+
+**AST 语义级代码搜索（突破正则局限）：**
+> "用 `query_ast` 帮我在整个项目中找出所有形如 `const $VAR = ref($VAL)` 的变量声明，或者寻找匹配 `ElMessage.success($MSG)` 的所有函数调用。"
 
 ---
 
