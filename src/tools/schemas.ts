@@ -205,4 +205,27 @@ export const toolSchemas = [
       required: ["filePath"],
     },
   },
+  {
+    name: "query_ast",
+    description:
+      "使用 ast-grep 的模式匹配语法在工作区搜索代码结构。用于查找函数调用、指令、特定配置等。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspacePath: {
+          type: "string",
+          description: "要扫描的工作区根目录绝对路径",
+        },
+        pattern: {
+          type: "string",
+          description: "ast-grep 匹配模式，例如: $A.get($B)",
+        },
+        language: {
+          type: "string",
+          description: "目标语言，例如: 'typescript', 'javascript', 'html' (用于vue template)",
+        },
+      },
+      required: ["workspacePath", "pattern", "language"],
+    },
+  },
 ];

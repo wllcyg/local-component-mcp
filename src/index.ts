@@ -17,6 +17,7 @@ import { handleGetComponentUsages } from "./tools/usages.js";
 import { handleSearchComposables, handleGetComposableDetail } from "./tools/composables.js";
 import { handleAnalyzePage } from "./tools/page.js";
 import { handleSearchTypes, handleGetTypeDetail } from "./tools/types.js";
+import { handleQueryAst } from "./tools/ast-query.js";
 import { stopAllWatchers } from "./utils/index-cache.js";
 
 const server = new Server(
@@ -71,6 +72,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "get_type_detail":
         return await handleGetTypeDetail(args);
+
+      case "query_ast":
+        return await handleQueryAst(args);
 
       default:
         throw new McpError(-32601, `Unknown tool: ${name}`);
